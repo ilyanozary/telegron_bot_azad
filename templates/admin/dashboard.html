@@ -1,0 +1,38 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+{{ base_css|safe }}
+<main class="admin-shell">
+  <section class="hero">
+    <span class="badge-soft">Telegram Group Manager</span>
+    <h1>داشبورد مدیریت</h1>
+    <p>از اینجا وضعیت فیلتر کلمات و قانون عضویت اجباری را کنترل کنید.</p>
+  </section>
+
+  <section class="grid">
+    <article class="panel-card">
+      <h2>کلمات ممنوعه</h2>
+      <div class="metric">{{ words_count }}</div>
+      <p class="muted">کلمه و عبارت فعال برای حذف پیام و بن کاربر.</p>
+      <a class="pretty-btn" href="{{ url_for('bad_words.index') }}">مدیریت کلمات</a>
+    </article>
+
+    <article class="panel-card">
+      <h2>کانال اجباری</h2>
+      {% if channel %}
+        <p class="badge-soft">{{ channel }}</p>
+        <p class="muted">بعد از {{ limit }} پیام، پیام آخر کاربر غیرعضو حذف می‌شود.</p>
+      {% else %}
+        <p class="muted">هنوز کانالی تعریف نشده و این قانون غیرفعال است.</p>
+      {% endif %}
+      <a class="pretty-btn" href="{{ url_for('settings.index') }}">تنظیم کانال</a>
+    </article>
+
+    <article class="panel-card">
+      <h2>امنیت پنل</h2>
+      <p class="muted">نام کاربری و رمز عبور از متغیرهای محیطی خوانده می‌شود.</p>
+      <a class="pretty-btn" href="{{ url_for('logout') }}">خروج</a>
+    </article>
+  </section>
+</main>
+{% endblock %}

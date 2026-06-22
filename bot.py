@@ -3,12 +3,20 @@ import os
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from urllib.parse import urlparse
 
 from telegram import ChatPermissions, Update
 from telegram.constants import ChatType
 from telegram.error import Forbidden, TelegramError
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
+
+from storage import (
+    get_bad_words,
+    get_required_channel,
+    get_required_channel_message_limit,
+    init_db,
+    normalize_text,
+)
 
 
 logging.basicConfig(
@@ -17,7 +25,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BAD_WORDS_FILE = Path("bad_words.txt")
 SPAM_WINDOW_SECONDS = 8
 SPAM_MAX_MESSAGES = 5
 SPAM_REPEAT_WINDOW_SECONDS = 20
@@ -27,41 +34,15 @@ SPAM_MUTE_SECONDS = 10 * 60
 # In-memory anti-spam tracking (resets on bot restart).
 MESSAGE_TIMES: dict[tuple[int, int], deque[float]] = defaultdict(deque)
 REPEAT_STATE: dict[tuple[int, int], tuple[str, int, float]] = {}
-
-
-def normalize_text(text: str) -> str:
-    # Normalize to lower case and strip zero-width chars commonly used to bypass filters.
-    return (
-        text.lower()
-        .replace("\u200c", "")
-        .replace("\u200d", "")
-        .replace("\ufeff", "")
-        .strip()
-    )
-
-
-def load_bad_words(file_path: Path) -> list[str]:
-    if not file_path.exists():
-        logger.warning("bad_words.txt not found. Starting with empty profanity list.")
-        return []
-
-    words: list[str] = []
-    for line in file_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        words.append(normalize_text(line))
-    return sorted(set(words))
-
-
-BAD_WORDS = load_bad_words(BAD_WORDS_FILE)
+CHANNEL_JOIN_MESSAGE_COUNTS: dict[tuple[int, int, str], int] = defaultdict(int)
 
 
 def contains_bad_word(text: str) -> bool:
-    if not BAD_WORDS:
+    bad_words = get_bad_words()
+    if not bad_words:
         return False
     clean_text = normalize_text(text)
-    return any(word in clean_text for word in BAD_WORDS)
+    return any(word in clean_text for word in bad_words)
 
 
 def detect_spam(chat_id: int, user_id: int, text: str) -> bool:
@@ -107,6 +88,79 @@ async def is_user_admin(
     return member.status in {"administrator", "creator"}
 
 
+def get_channel_chat_id(channel: str) -> str:
+    channel = channel.strip()
+    if channel.startswith("https://t.me/"):
+        path = urlparse(channel).path.strip("/")
+        if path and not path.startswith("+"):
+            return f"@{path.split('/')[0]}"
+    return channel
+
+
+def get_channel_join_link(channel: str) -> str:
+    channel = channel.strip()
+    if channel.startswith("http://") or channel.startswith("https://"):
+        return channel
+    if channel.startswith("@"):
+        return f"https://t.me/{channel[1:]}"
+    return channel
+
+
+async def is_user_required_channel_member(
+    channel: str, user_id: int, context: ContextTypes.DEFAULT_TYPE
+) -> bool | None:
+    chat_id = get_channel_chat_id(channel)
+    if not chat_id:
+        return True
+
+    try:
+        member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+    except TelegramError as exc:
+        logger.warning("Could not check required channel membership: %s", exc)
+        return None
+
+    return member.status in {"administrator", "creator", "member"}
+
+
+async def enforce_required_channel_membership(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
+    chat = update.effective_chat
+    user = update.effective_user
+    message = update.message
+    channel = get_required_channel()
+    if not chat or not user or not message or not channel:
+        return False
+
+    is_member = await is_user_required_channel_member(channel, user.id, context)
+    if is_member is True:
+        CHANNEL_JOIN_MESSAGE_COUNTS.pop((chat.id, user.id, channel), None)
+        return False
+    if is_member is None:
+        return False
+
+    key = (chat.id, user.id, channel)
+    CHANNEL_JOIN_MESSAGE_COUNTS[key] += 1
+    message_limit = get_required_channel_message_limit()
+    if CHANNEL_JOIN_MESSAGE_COUNTS[key] < message_limit:
+        return False
+
+    try:
+        await message.delete()
+    except TelegramError as exc:
+        logger.warning("Could not delete non-member message: %s", exc)
+
+    await context.bot.send_message(
+        chat_id=chat.id,
+        text=(
+            f"{user.mention_html()} برای ادامه فعالیت باید عضو کانال زیر بشی:\n"
+            f"{get_channel_join_link(channel)}"
+        ),
+        parse_mode="HTML",
+    )
+    return True
+
+
 async def welcome_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.new_chat_members:
         return
@@ -125,6 +179,8 @@ async def welcome_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
+        return
+    if update.message.new_chat_members:
         return
 
     chat = update.effective_chat
@@ -164,6 +220,9 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             logger.error("Ban failed: %s", exc)
         return
 
+    if await enforce_required_channel_membership(update, context):
+        return
+
     if not detect_spam(chat_id=chat.id, user_id=user.id, text=text):
         return
 
@@ -200,6 +259,7 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 def main() -> None:
+    init_db()
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN is not set. Export BOT_TOKEN and run again.")
@@ -209,9 +269,7 @@ def main() -> None:
     application.add_handler(
         MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_members)
     )
-    application.add_handler(
-        MessageHandler(filters.TEXT | filters.CAPTION, moderate_messages)
-    )
+    application.add_handler(MessageHandler(filters.ALL, moderate_messages))
 
     logger.info("Bot started.")
     application.run_polling(allowed_updates=Update.ALL_TYPES)

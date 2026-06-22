@@ -1,0 +1,37 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+{{ base_css|safe }}
+<main class="admin-shell">
+  <section class="hero">
+    <span class="badge-soft">عضویت اجباری</span>
+    <h1>تنظیمات کانال</h1>
+    <p>کاربری که عضو کانال نباشد تا چند پیام فرصت دارد؛ بعد از رسیدن به محدودیت، پیام آخرش حذف می‌شود و لینک عضویت دریافت می‌کند.</p>
+  </section>
+
+  <section class="panel-card">
+    <form class="admin-form" method="post">
+      <label for="required_channel">کانال اجباری</label>
+      <input
+        id="required_channel"
+        name="required_channel"
+        value="{{ channel }}"
+        placeholder="@your_channel یا https://t.me/your_channel"
+      >
+      <p class="muted">برای چک عضویت، بهتر است بات را داخل همان کانال ادمین کنید. اگر کانال خصوصی است، شناسه عددی کانال را وارد کنید.</p>
+
+      <label for="required_channel_message_limit">تعداد پیام مجاز قبل از هشدار</label>
+      <input
+        id="required_channel_message_limit"
+        name="required_channel_message_limit"
+        type="number"
+        min="1"
+        value="{{ limit }}"
+        required
+      >
+
+      <button class="pretty-btn" type="submit">ذخیره تنظیمات</button>
+    </form>
+  </section>
+</main>
+{% endblock %}
