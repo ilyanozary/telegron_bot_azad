@@ -203,21 +203,13 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             logger.warning("Could not delete message: %s", exc)
 
         try:
-            await context.bot.ban_chat_member(chat_id=chat.id, user_id=user.id)
             await context.bot.send_message(
                 chat_id=chat.id,
-                text=f"کاربر {user.mention_html()} به دلیل توهین بن شد.",
+                text=f"پیام {user.mention_html()} به دلیل استفاده از کلمات ممنوعه حذف شد.",
                 parse_mode="HTML",
             )
-        except Forbidden:
-            await context.bot.send_message(
-                chat_id=chat.id,
-                text=(
-                    "نتونستم بن کنم. ربات باید ادمین باشه و مجوز Ban Users داشته باشه."
-                ),
-            )
         except TelegramError as exc:
-            logger.error("Ban failed: %s", exc)
+            logger.error("Could not send profanity warning: %s", exc)
         return
 
     if await enforce_required_channel_membership(update, context):
