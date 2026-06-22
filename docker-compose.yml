@@ -1,0 +1,27 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    command: python bot.py
+    env_file:
+      - .env
+    environment:
+      BOT_DB_PATH: /data/bot_settings.sqlite3
+    volumes:
+      - bot_data:/data
+
+  admin:
+    build: .
+    restart: unless-stopped
+    command: gunicorn --bind 0.0.0.0:5000 "admin_panel:create_app()"
+    env_file:
+      - .env
+    environment:
+      BOT_DB_PATH: /data/bot_settings.sqlite3
+    ports:
+      - "5000:5000"
+    volumes:
+      - bot_data:/data
+
+volumes:
+  bot_data:

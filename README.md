@@ -11,6 +11,51 @@
 
 ## راه‌اندازی
 
+### اجرا با Docker
+
+1. فایل تنظیمات را بسازید:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. مقدارهای داخل `.env` را کامل کنید:
+
+   ```env
+   BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=CHANGE_ME
+   ADMIN_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
+   ```
+
+3. سرویس‌ها را بالا بیاورید:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+4. پنل ادمین:
+
+   ```text
+   http://localhost:5000/admin
+   ```
+
+5. دیدن لاگ‌ها:
+
+   ```bash
+   docker compose logs -f
+   ```
+
+6. خاموش کردن سرویس‌ها:
+
+   ```bash
+   docker compose down
+   ```
+
+داده‌های پنل و کلمات ممنوعه داخل volume به نام `bot_data` ذخیره می‌شود و با ری‌استارت کانتینرها باقی می‌ماند.
+
+### اجرای مستقیم با Python
+
 1. ساخت محیط مجازی:
 
    ```bash
