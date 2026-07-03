@@ -14,7 +14,9 @@
       <h2>کلمات ممنوعه</h2>
       <div class="metric">{{ words_count }}</div>
       <p class="muted">کلمه و عبارت فعال برای حذف پیام و بن کاربر.</p>
-      <a class="pretty-btn" href="{{ url_for('bad_words.index') }}">مدیریت کلمات</a>
+      <div class="card-actions">
+        <a class="pretty-btn" href="{{ url_for('bad_words.index') }}">مدیریت کلمات</a>
+      </div>
     </article>
 
     <article class="panel-card">
@@ -25,13 +27,17 @@
       {% else %}
         <p class="muted">هنوز کانالی تعریف نشده و این قانون غیرفعال است.</p>
       {% endif %}
-      <a class="pretty-btn" href="{{ url_for('settings.index') }}">تنظیم کانال</a>
+      <div class="card-actions">
+        <a class="pretty-btn" href="{{ url_for('settings.index') }}">تنظیم کانال</a>
+      </div>
     </article>
 
     <article class="panel-card">
       <h2>امنیت پنل</h2>
       <p class="muted">نام کاربری و رمز عبور از متغیرهای محیطی خوانده می‌شود.</p>
-      <a class="pretty-btn" href="{{ url_for('logout') }}">خروج</a>
+      <div class="card-actions">
+        <a class="pretty-btn" href="{{ url_for('logout') }}">خروج</a>
+      </div>
     </article>
   </section>
 </main>
