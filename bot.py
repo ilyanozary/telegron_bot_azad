@@ -3,6 +3,7 @@ import os
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
+from html import escape
 from urllib.parse import urlparse
 
 from telegram import ChatPermissions, Update
@@ -130,6 +131,35 @@ def get_channel_join_link(channel: str) -> str:
     return channel
 
 
+async def get_channel_join_text(
+    channel: str, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    channel = channel.strip()
+    chat_id = get_channel_chat_id(channel)
+
+    if channel.startswith("http://") or channel.startswith("@"):
+        return get_channel_join_link(channel)
+
+    try:
+        chat = await context.bot.get_chat(chat_id=chat_id)
+    except TelegramError as exc:
+        logger.warning(
+            "Could not resolve required channel display text. channel=%r chat_id=%r error=%s",
+            channel,
+            chat_id,
+            exc,
+        )
+        return "کانال تعیین‌شده"
+
+    if chat.username:
+        return f"https://t.me/{chat.username}"
+
+    if chat.title:
+        return escape(chat.title)
+
+    return "کانال تعیین‌شده"
+
+
 async def is_user_required_channel_member(
     channel: str, user_id: int, context: ContextTypes.DEFAULT_TYPE
 ) -> bool | None:
@@ -230,11 +260,14 @@ async def enforce_required_channel_membership(
     except TelegramError as exc:
         logger.warning("Could not delete non-member message: %s", exc)
 
+    channel_text = await get_channel_join_text(channel, context)
     await context.bot.send_message(
         chat_id=chat.id,
         text=(
-            f"{user.mention_html()} برای ادامه فعالیت باید عضو کانال زیر بشی:\n"
-            f"{get_channel_join_link(channel)}"
+            f"{user.mention_html()} عزیز،\n\n"
+            "برای ادامه فعالیت در گروه، لطفاً ابتدا در کانال زیر عضو شوید:\n"
+            f"{channel_text}\n\n"
+            "پس از عضویت، می‌توانید پیام خود را دوباره ارسال کنید."
         ),
         parse_mode="HTML",
     )
@@ -251,8 +284,8 @@ async def welcome_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     for member in update.message.new_chat_members:
         await update.message.reply_text(
-            f"خوش اومدی {member.mention_html()} 🌟\n"
-            "قوانین گروه رو لطفاً رعایت کن.",
+            f"{member.mention_html()} عزیز، به گروه خوش آمدید.\n\n"
+            "لطفاً قوانین گروه را رعایت کنید و از ارسال پیام‌های نامرتبط یا تکراری خودداری فرمایید.",
             parse_mode="HTML",
         )
 
@@ -285,7 +318,11 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         try:
             await context.bot.send_message(
                 chat_id=chat.id,
-                text=f"پیام {user.mention_html()} به دلیل استفاده از کلمات ممنوعه حذف شد.",
+                text=(
+                    f"{user.mention_html()} عزیز،\n\n"
+                    "پیام شما به دلیل استفاده از عبارت نامناسب حذف شد. "
+                    "لطفاً در ادامه گفتگو، قوانین گروه را رعایت فرمایید."
+                ),
                 parse_mode="HTML",
             )
         except TelegramError as exc:
@@ -314,8 +351,10 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await context.bot.send_message(
             chat_id=chat.id,
             text=(
-                f"کاربر {user.mention_html()} به دلیل اسپم "
-                f"به مدت {SPAM_MUTE_SECONDS // 60} دقیقه میوت شد."
+                f"{user.mention_html()} عزیز،\n\n"
+                "به دلیل ارسال پیام‌های متعدد یا تکراری، دسترسی ارسال پیام شما "
+                f"به مدت {SPAM_MUTE_SECONDS // 60} دقیقه محدود شد.\n\n"
+                "پس از پایان محدودیت، لطفاً پیام‌ها را با فاصله و بدون تکرار ارسال فرمایید."
             ),
             parse_mode="HTML",
         )
@@ -323,7 +362,8 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await context.bot.send_message(
             chat_id=chat.id,
             text=(
-                "نتونستم میوت کنم. ربات باید ادمین باشه و مجوز Restrict Members داشته باشه."
+                "امکان اعمال محدودیت وجود ندارد. لطفاً دسترسی ادمین ربات و مجوز "
+                "Restrict Members را بررسی کنید."
             ),
         )
     except TelegramError as exc:
