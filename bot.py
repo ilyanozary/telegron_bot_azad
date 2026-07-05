@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from telegram import ChatPermissions, Update
 from telegram.constants import ChatType
 from telegram.error import Forbidden, TelegramError
-from telegram.ext import Application, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, ChatMemberHandler, ContextTypes, MessageHandler, filters
 
 from storage import (
     get_bad_words,
@@ -26,15 +26,39 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 SPAM_WINDOW_SECONDS = 8
-SPAM_MAX_MESSAGES = 5
+SPAM_MAX_MESSAGES = 15
 SPAM_REPEAT_WINDOW_SECONDS = 20
-SPAM_REPEAT_MAX = 3
+SPAM_REPEAT_MAX = 8
 SPAM_MUTE_SECONDS = 10 * 60
 
 # In-memory anti-spam tracking (resets on bot restart).
 MESSAGE_TIMES: dict[tuple[int, int], deque[float]] = defaultdict(deque)
 REPEAT_STATE: dict[tuple[int, int], tuple[str, int, float]] = {}
 CHANNEL_JOIN_MESSAGE_COUNTS: dict[tuple[int, int, str], int] = defaultdict(int)
+
+
+def describe_chat(chat) -> str:
+    title = getattr(chat, "title", None) or getattr(chat, "full_name", None) or "بدون عنوان"
+    username = getattr(chat, "username", None)
+    username_text = f"@{username}" if username else "بدون username"
+    return f"title={title!r}, username={username_text}, id={chat.id}, type={chat.type}"
+
+
+def describe_admin_permissions(member) -> str:
+    permission_names = (
+        "can_delete_messages",
+        "can_restrict_members",
+        "can_invite_users",
+        "can_manage_chat",
+        "can_post_messages",
+        "can_edit_messages",
+    )
+    enabled = [name for name in permission_names if getattr(member, name, False)]
+    return ", ".join(enabled) if enabled else "بدون دسترسی ادمین"
+
+
+def is_admin_status(status: str) -> bool:
+    return status in {"administrator", "creator"}
 
 
 def contains_bad_word(text: str) -> bool:
@@ -116,10 +140,66 @@ async def is_user_required_channel_member(
     try:
         member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
     except TelegramError as exc:
-        logger.warning("Could not check required channel membership: %s", exc)
+        logger.warning(
+            "Could not check required channel membership. channel=%r chat_id=%r user_id=%s error=%s",
+            channel,
+            chat_id,
+            user_id,
+            exc,
+        )
         return None
 
     return member.status in {"administrator", "creator", "member"}
+
+
+async def log_required_channel_access(application: Application) -> None:
+    channel = get_required_channel()
+    if not channel:
+        logger.info("Required channel is not configured.")
+        return
+
+    chat_id = get_channel_chat_id(channel)
+    bot = application.bot
+    try:
+        bot_user = await bot.get_me()
+        chat = await bot.get_chat(chat_id=chat_id)
+        member = await bot.get_chat_member(chat_id=chat_id, user_id=bot_user.id)
+    except TelegramError as exc:
+        logger.warning(
+            "Could not read bot access for required channel. channel=%r chat_id=%r error=%s",
+            channel,
+            chat_id,
+            exc,
+        )
+        return
+
+    logger.info(
+        "Required channel access: %s, bot_status=%s, bot_is_admin=%s, permissions=%s",
+        describe_chat(chat),
+        member.status,
+        is_admin_status(member.status),
+        describe_admin_permissions(member),
+    )
+
+
+async def log_bot_chat_member_update(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    change = update.my_chat_member
+    if not change:
+        return
+
+    chat = change.chat
+    old_member = change.old_chat_member
+    new_member = change.new_chat_member
+    logger.info(
+        "Bot membership changed: %s, old_status=%s, new_status=%s, bot_is_admin=%s, permissions=%s",
+        describe_chat(chat),
+        old_member.status,
+        new_member.status,
+        is_admin_status(new_member.status),
+        describe_admin_permissions(new_member),
+    )
 
 
 async def enforce_required_channel_membership(
@@ -256,8 +336,9 @@ def main() -> None:
     if not token:
         raise RuntimeError("BOT_TOKEN is not set. Export BOT_TOKEN and run again.")
 
-    application = Application.builder().token(token).build()
+    application = Application.builder().token(token).post_init(log_required_channel_access).build()
 
+    application.add_handler(ChatMemberHandler(log_bot_chat_member_update, ChatMemberHandler.MY_CHAT_MEMBER))
     application.add_handler(
         MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_members)
     )
