@@ -13,7 +13,7 @@
     <article class="panel-card">
       <h2>کلمات ممنوعه</h2>
       <div class="metric">{{ words_count }}</div>
-      <p class="muted">کلمه و عبارت فعال برای حذف پیام و بن کاربر.</p>
+      <p class="muted">کلمه و عبارت فعال برای حذف پیام نامناسب.</p>
       <div class="card-actions">
         <a class="pretty-btn" href="{{ url_for('bad_words.index') }}">مدیریت کلمات</a>
       </div>
@@ -37,6 +37,14 @@
       <p class="muted">نام کاربری و رمز عبور از متغیرهای محیطی خوانده می‌شود.</p>
       <div class="card-actions">
         <a class="pretty-btn" href="{{ url_for('logout') }}">خروج</a>
+      </div>
+    </article>
+
+    <article class="panel-card">
+      <h2>پیام‌های ربات</h2>
+      <p class="muted">متن پیام‌های خوش‌آمدگویی، هشدار عضویت، حذف پیام و اسپم را تغییر دهید.</p>
+      <div class="card-actions">
+        <a class="pretty-btn" href="{{ url_for('messages.index') }}">ویرایش پیام‌ها</a>
       </div>
     </article>
   </section>

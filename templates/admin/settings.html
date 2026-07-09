@@ -9,6 +9,16 @@
     <p>کاربری که عضو کانال نباشد تا چند پیام فرصت دارد؛ بعد از رسیدن به محدودیت، پیام آخرش حذف می‌شود و لینک عضویت دریافت می‌کند.</p>
   </section>
 
+  {% if validation %}
+    <section class="status-card status-{{ validation.level }}">
+      <h3>{{ validation.title }}</h3>
+      <p>{{ validation.message }}</p>
+      {% if validation.detail %}
+        <p class="ltr">{{ validation.detail }}</p>
+      {% endif %}
+    </section>
+  {% endif %}
+
   <section class="panel-card">
     <form class="admin-form" method="post">
       <label for="required_channel">کانال اجباری</label>
@@ -30,7 +40,7 @@
         required
       >
 
-      <button class="pretty-btn" type="submit">ذخیره تنظیمات</button>
+      <button class="pretty-btn" type="submit">ذخیره و بررسی وضعیت ربات</button>
     </form>
   </section>
 </main>

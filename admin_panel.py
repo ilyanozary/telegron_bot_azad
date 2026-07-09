@@ -1,4 +1,9 @@
+import json
 import os
+from dataclasses import dataclass
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urlparse
+from urllib.request import urlopen
 
 from flask import Flask, Response, flash, redirect, render_template_string, request, session, url_for
 from flask_admin import Admin, AdminIndexView, expose
@@ -7,6 +12,7 @@ from flask_admin import BaseView
 from storage import (
     add_bad_word,
     delete_bad_word,
+    get_message_templates,
     get_required_channel,
     get_required_channel_message_limit,
     init_db,
@@ -17,6 +23,152 @@ from storage import (
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+
+MESSAGE_TEMPLATE_LABELS = {
+    "message_welcome": {
+        "label": "خوش‌آمدگویی عضو جدید",
+        "hint": "متغیر قابل استفاده: {user}",
+    },
+    "message_required_channel": {
+        "label": "هشدار عضویت اجباری در کانال",
+        "hint": "متغیرهای قابل استفاده: {user} و {channel}",
+    },
+    "message_profanity_warning": {
+        "label": "هشدار حذف پیام نامناسب",
+        "hint": "متغیر قابل استفاده: {user}",
+    },
+    "message_spam_mute": {
+        "label": "هشدار میوت اسپم",
+        "hint": "متغیرهای قابل استفاده: {user} و {minutes}",
+    },
+    "message_restrict_error": {
+        "label": "خطای نداشتن دسترسی Restrict Members",
+        "hint": "این پیام معمولاً فقط متن ثابت لازم دارد.",
+    },
+}
+
+
+@dataclass
+class ChannelValidationResult:
+    ok: bool
+    level: str
+    title: str
+    message: str
+    detail: str = ""
+
+
+def get_channel_chat_id(channel: str) -> str:
+    channel = channel.strip()
+    if channel.startswith("https://t.me/"):
+        path = urlparse(channel).path.strip("/")
+        if path and not path.startswith("+"):
+            return f"@{path.split('/')[0]}"
+    return channel
+
+
+def telegram_api_request(method: str, **params) -> dict:
+    query = urlencode(params)
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
+    if query:
+        url = f"{url}?{query}"
+
+    try:
+        with urlopen(url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            payload = {"ok": False, "description": body or str(exc)}
+    except URLError as exc:
+        return {"ok": False, "description": f"خطای شبکه: {exc.reason}"}
+    except TimeoutError:
+        return {"ok": False, "description": "درخواست به تلگرام زمان‌بر شد و timeout خورد."}
+    except json.JSONDecodeError:
+        return {"ok": False, "description": "پاسخ تلگرام قابل خواندن نبود."}
+
+    return payload
+
+
+def validate_required_channel(channel: str) -> ChannelValidationResult:
+    channel = channel.strip()
+    if not channel:
+        return ChannelValidationResult(
+            ok=True,
+            level="info",
+            title="قانون کانال غیرفعال است",
+            message="کانالی وارد نشده؛ عضویت اجباری فعلاً اعمال نمی‌شود.",
+        )
+    if not BOT_TOKEN:
+        return ChannelValidationResult(
+            ok=False,
+            level="danger",
+            title="توکن بات تنظیم نشده",
+            message="برای چک کانال، متغیر BOT_TOKEN باید برای سرویس پنل هم تنظیم باشد.",
+        )
+
+    chat_id = get_channel_chat_id(channel)
+    bot_response = telegram_api_request("getMe")
+    if not bot_response.get("ok"):
+        return ChannelValidationResult(
+            ok=False,
+            level="danger",
+            title="توکن بات معتبر نیست",
+            message="پنل نتوانست اطلاعات ربات را از تلگرام دریافت کند.",
+            detail=bot_response.get("description", ""),
+        )
+
+    bot_user_id = bot_response["result"]["id"]
+    chat_response = telegram_api_request("getChat", chat_id=chat_id)
+    if not chat_response.get("ok"):
+        return ChannelValidationResult(
+            ok=False,
+            level="danger",
+            title="کانال پیدا نشد یا در دسترس نیست",
+            message=(
+                "شناسه/یوزرنیم کانال را بررسی کنید. برای کانال خصوصی معمولاً باید "
+                "شناسه عددی کانال را وارد کنید و ربات داخل کانال باشد."
+            ),
+            detail=chat_response.get("description", ""),
+        )
+
+    member_response = telegram_api_request(
+        "getChatMember",
+        chat_id=chat_id,
+        user_id=bot_user_id,
+    )
+    if not member_response.get("ok"):
+        return ChannelValidationResult(
+            ok=False,
+            level="danger",
+            title="ربات هنوز داخل کانال قابل بررسی نیست",
+            message="ربات را به کانال اضافه و ادمین کنید، سپس دوباره دکمه ذخیره را بزنید.",
+            detail=member_response.get("description", ""),
+        )
+
+    chat = chat_response["result"]
+    member = member_response["result"]
+    status = member.get("status", "")
+    chat_title = chat.get("title") or chat.get("username") or chat_id
+    if status not in {"administrator", "creator"}:
+        return ChannelValidationResult(
+            ok=False,
+            level="warning",
+            title="ربات هنوز ادمین کانال نیست",
+            message=(
+                f"کانال «{chat_title}» پیدا شد، اما وضعیت ربات «{status or 'نامشخص'}» است. "
+                "ربات را در کانال ادمین کنید و دوباره ذخیره/بررسی را بزنید."
+            ),
+        )
+
+    return ChannelValidationResult(
+        ok=True,
+        level="success",
+        title="ربات ادمین کانال است",
+        message=f"کانال «{chat_title}» بررسی شد؛ ربات ادمین است و همه چیز اوکیه.",
+    )
 
 
 BASE_CSS = """
@@ -156,9 +308,9 @@ BASE_CSS = """
     font-weight: 800;
     margin: 0;
   }
-  .admin-form input {
+  .admin-form input,
+  .admin-form textarea {
     width: 100%;
-    min-height: 46px;
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 9px 12px;
@@ -166,7 +318,17 @@ BASE_CSS = """
     color: var(--ink);
     box-shadow: inset 0 1px 2px rgba(15, 23, 42, .03);
   }
-  .admin-form input:focus {
+  .admin-form input {
+    min-height: 46px;
+  }
+  .admin-form textarea {
+    min-height: 140px;
+    resize: vertical;
+    line-height: 1.9;
+    direction: rtl;
+  }
+  .admin-form input:focus,
+  .admin-form textarea:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(15, 118, 110, .14);
     outline: 0;
@@ -246,6 +408,45 @@ BASE_CSS = """
   .alert {
     direction: rtl;
     border-radius: 8px;
+  }
+  .status-card {
+    border-radius: 8px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    margin-bottom: 14px;
+  }
+  .status-success {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #065f46;
+  }
+  .status-warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+  .status-danger {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #991b1b;
+  }
+  .status-info {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
+  }
+  .status-card h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+    font-weight: 900;
+  }
+  .template-grid {
+    display: grid;
+    gap: 14px;
+  }
+  .ltr {
+    direction: ltr;
+    text-align: left;
   }
   .login-shell {
     max-width: 460px;
@@ -379,6 +580,7 @@ def create_app() -> Flask:
     )
     admin.add_view(BadWordsView(name="کلمات ممنوعه", endpoint="bad_words"))
     admin.add_view(SettingsView(name="تنظیمات کانال", endpoint="settings"))
+    admin.add_view(MessagesView(name="پیام‌های ربات", endpoint="messages"))
     return app
 
 
@@ -421,20 +623,45 @@ class BadWordsView(BaseView):
 class SettingsView(BaseView):
     @expose("/", methods=["GET", "POST"])
     def index(self) -> str | Response:
+        validation = ChannelValidationResult(
+            ok=True,
+            level="info",
+            title="آماده بررسی کانال",
+            message="بعد از وارد کردن کانال و ذخیره، پنل وضعیت ادمین بودن ربات را از تلگرام بررسی می‌کند.",
+        )
         if request.method == "POST":
-            set_setting("required_channel", request.form.get("required_channel", ""))
+            channel = request.form.get("required_channel", "").strip()
             set_setting(
                 "required_channel_message_limit",
                 request.form.get("required_channel_message_limit", "5"),
             )
-            flash("تنظیمات کانال ذخیره شد.", "success")
-            return redirect(url_for(".index"))
+            set_setting("required_channel", channel)
+            validation = validate_required_channel(channel)
+            flash(validation.message, validation.level)
 
         return self.render(
             "admin/settings.html",
             base_css=BASE_CSS,
             channel=get_required_channel(),
             limit=get_required_channel_message_limit(),
+            validation=validation,
+        )
+
+
+class MessagesView(BaseView):
+    @expose("/", methods=["GET", "POST"])
+    def index(self) -> str | Response:
+        if request.method == "POST":
+            for key in MESSAGE_TEMPLATE_LABELS:
+                set_setting(key, request.form.get(key, ""))
+            flash("پیام‌های ربات ذخیره شد.", "success")
+            return redirect(url_for(".index"))
+
+        return self.render(
+            "admin/messages.html",
+            base_css=BASE_CSS,
+            labels=MESSAGE_TEMPLATE_LABELS,
+            templates=get_message_templates(),
         )
 
 

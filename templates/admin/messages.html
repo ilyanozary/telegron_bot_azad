@@ -1,0 +1,28 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+{{ base_css|safe }}
+<main class="admin-shell">
+  <section class="hero">
+    <span class="badge-soft">متن پیام‌ها</span>
+    <h1>پیام‌های ربات</h1>
+    <p>همه پیام‌هایی که ربات داخل گروه ارسال می‌کند از اینجا قابل تغییر است. متن‌ها با parse mode HTML ارسال می‌شوند.</p>
+  </section>
+
+  <form class="admin-form" method="post">
+    <section class="template-grid">
+      {% for key, meta in labels.items() %}
+        <article class="panel-card">
+          <label for="{{ key }}">{{ meta.label }}</label>
+          <p class="muted">{{ meta.hint }}</p>
+          <textarea id="{{ key }}" name="{{ key }}" required>{{ templates.get(key, '') }}</textarea>
+        </article>
+      {% endfor %}
+    </section>
+
+    <div class="card-actions">
+      <button class="pretty-btn" type="submit">ذخیره پیام‌ها</button>
+    </div>
+  </form>
+</main>
+{% endblock %}

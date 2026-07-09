@@ -13,6 +13,7 @@ from telegram.ext import Application, ChatMemberHandler, ContextTypes, MessageHa
 
 from storage import (
     get_bad_words,
+    get_message_template,
     get_required_channel,
     get_required_channel_message_limit,
     init_db,
@@ -36,6 +37,20 @@ SPAM_MUTE_SECONDS = 10 * 60
 MESSAGE_TIMES: dict[tuple[int, int], deque[float]] = defaultdict(deque)
 REPEAT_STATE: dict[tuple[int, int], tuple[str, int, float]] = {}
 CHANNEL_JOIN_MESSAGE_COUNTS: dict[tuple[int, int, str], int] = defaultdict(int)
+
+
+class SafeTemplateValues(dict):
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
+def render_bot_message(template_key: str, **values: str | int) -> str:
+    template = get_message_template(template_key)
+    try:
+        return template.format_map(SafeTemplateValues(values))
+    except (KeyError, ValueError) as exc:
+        logger.warning("Could not render message template %s: %s", template_key, exc)
+        return template
 
 
 def describe_chat(chat) -> str:
@@ -263,11 +278,10 @@ async def enforce_required_channel_membership(
     channel_text = await get_channel_join_text(channel, context)
     await context.bot.send_message(
         chat_id=chat.id,
-        text=(
-            f"{user.mention_html()} عزیز،\n\n"
-            "برای ادامه فعالیت در گروه، لطفاً ابتدا در کانال زیر عضو شوید:\n"
-            f"{channel_text}\n\n"
-            "پس از عضویت، می‌توانید پیام خود را دوباره ارسال کنید."
+        text=render_bot_message(
+            "message_required_channel",
+            user=user.mention_html(),
+            channel=channel_text,
         ),
         parse_mode="HTML",
     )
@@ -284,8 +298,7 @@ async def welcome_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     for member in update.message.new_chat_members:
         await update.message.reply_text(
-            f"{member.mention_html()} عزیز، به گروه خوش آمدید.\n\n"
-            "لطفاً قوانین گروه را رعایت کنید و از ارسال پیام‌های نامرتبط یا تکراری خودداری فرمایید.",
+            render_bot_message("message_welcome", user=member.mention_html()),
             parse_mode="HTML",
         )
 
@@ -318,10 +331,9 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         try:
             await context.bot.send_message(
                 chat_id=chat.id,
-                text=(
-                    f"{user.mention_html()} عزیز،\n\n"
-                    "پیام شما به دلیل استفاده از عبارت نامناسب حذف شد. "
-                    "لطفاً در ادامه گفتگو، قوانین گروه را رعایت فرمایید."
+                text=render_bot_message(
+                    "message_profanity_warning",
+                    user=user.mention_html(),
                 ),
                 parse_mode="HTML",
             )
@@ -350,21 +362,17 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         await context.bot.send_message(
             chat_id=chat.id,
-            text=(
-                f"{user.mention_html()} عزیز،\n\n"
-                "به دلیل ارسال پیام‌های متعدد یا تکراری، دسترسی ارسال پیام شما "
-                f"به مدت {SPAM_MUTE_SECONDS // 60} دقیقه محدود شد.\n\n"
-                "پس از پایان محدودیت، لطفاً پیام‌ها را با فاصله و بدون تکرار ارسال فرمایید."
+            text=render_bot_message(
+                "message_spam_mute",
+                user=user.mention_html(),
+                minutes=SPAM_MUTE_SECONDS // 60,
             ),
             parse_mode="HTML",
         )
     except Forbidden:
         await context.bot.send_message(
             chat_id=chat.id,
-            text=(
-                "امکان اعمال محدودیت وجود ندارد. لطفاً دسترسی ادمین ربات و مجوز "
-                "Restrict Members را بررسی کنید."
-            ),
+            text=render_bot_message("message_restrict_error"),
         )
     except TelegramError as exc:
         logger.error("Mute failed: %s", exc)

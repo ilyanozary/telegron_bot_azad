@@ -9,6 +9,31 @@ BAD_WORDS_FILE = Path("bad_words.txt")
 DEFAULT_SETTINGS = {
     "required_channel": "",
     "required_channel_message_limit": "5",
+    "message_welcome": (
+        "{user} عزیز، به گروه خوش آمدید.\n\n"
+        "لطفاً قوانین گروه را رعایت کنید و از ارسال پیام‌های نامرتبط یا تکراری خودداری فرمایید."
+    ),
+    "message_required_channel": (
+        "{user} عزیز،\n\n"
+        "برای ادامه فعالیت در گروه، لطفاً ابتدا در کانال زیر عضو شوید:\n"
+        "{channel}\n\n"
+        "پس از عضویت، می‌توانید پیام خود را دوباره ارسال کنید."
+    ),
+    "message_profanity_warning": (
+        "{user} عزیز،\n\n"
+        "پیام شما به دلیل استفاده از عبارت نامناسب حذف شد. "
+        "لطفاً در ادامه گفتگو، قوانین گروه را رعایت فرمایید."
+    ),
+    "message_spam_mute": (
+        "{user} عزیز،\n\n"
+        "به دلیل ارسال پیام‌های متعدد یا تکراری، دسترسی ارسال پیام شما "
+        "به مدت {minutes} دقیقه محدود شد.\n\n"
+        "پس از پایان محدودیت، لطفاً پیام‌ها را با فاصله و بدون تکرار ارسال فرمایید."
+    ),
+    "message_restrict_error": (
+        "امکان اعمال محدودیت وجود ندارد. لطفاً دسترسی ادمین ربات و مجوز "
+        "Restrict Members را بررسی کنید."
+    ),
 }
 
 
@@ -143,3 +168,16 @@ def get_required_channel_message_limit() -> int:
         return max(1, int(raw_limit))
     except ValueError:
         return 5
+
+
+def get_message_template(key: str) -> str:
+    return get_setting(key, DEFAULT_SETTINGS.get(key, ""))
+
+
+def get_message_templates() -> dict[str, str]:
+    init_db()
+    return {
+        key: get_setting(key, value)
+        for key, value in DEFAULT_SETTINGS.items()
+        if key.startswith("message_")
+    }
