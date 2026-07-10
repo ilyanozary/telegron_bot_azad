@@ -13,7 +13,20 @@
     <section class="template-grid">
       {% for key, meta in labels.items() %}
         <article class="panel-card">
-          <label for="{{ key }}">{{ meta.label }}</label>
+          {% if key == 'message_welcome' %}
+            <div class="toggle-row">
+              <div>
+                <label for="{{ key }}">{{ meta.label }}</label>
+                <p class="muted">با خاموش کردن این گزینه، ربات دیگر به اعضای جدید پیام خوش‌آمد نمی‌دهد.</p>
+              </div>
+              <label class="switch" title="روشن/خاموش کردن پیام خوش‌آمدگویی">
+                <input type="checkbox" name="welcome_enabled" value="1" {% if welcome_enabled %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          {% else %}
+            <label for="{{ key }}">{{ meta.label }}</label>
+          {% endif %}
           <p class="muted">{{ meta.hint }}</p>
           <textarea id="{{ key }}" name="{{ key }}" required>{{ templates.get(key, '') }}</textarea>
         </article>

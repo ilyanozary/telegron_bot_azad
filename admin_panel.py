@@ -13,6 +13,7 @@ from storage import (
     add_bad_word,
     delete_bad_word,
     get_message_templates,
+    get_setting,
     get_required_channel,
     get_required_channel_message_limit,
     init_db,
@@ -444,6 +445,50 @@ BASE_CSS = """
     display: grid;
     gap: 14px;
   }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 56px;
+    height: 32px;
+    flex: 0 0 auto;
+  }
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: #cbd5e1;
+    border-radius: 999px;
+    transition: .2s;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 24px;
+    width: 24px;
+    left: 4px;
+    bottom: 4px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .22);
+    transition: .2s;
+  }
+  .switch input:checked + .slider {
+    background: var(--accent);
+  }
+  .switch input:checked + .slider:before {
+    transform: translateX(24px);
+  }
   .ltr {
     direction: ltr;
     text-align: left;
@@ -652,6 +697,7 @@ class MessagesView(BaseView):
     @expose("/", methods=["GET", "POST"])
     def index(self) -> str | Response:
         if request.method == "POST":
+            set_setting("welcome_enabled", "1" if request.form.get("welcome_enabled") else "0")
             for key in MESSAGE_TEMPLATE_LABELS:
                 set_setting(key, request.form.get(key, ""))
             flash("پیام‌های ربات ذخیره شد.", "success")
@@ -662,6 +708,7 @@ class MessagesView(BaseView):
             base_css=BASE_CSS,
             labels=MESSAGE_TEMPLATE_LABELS,
             templates=get_message_templates(),
+            welcome_enabled=get_setting("welcome_enabled", "1") == "1",
         )
 
 

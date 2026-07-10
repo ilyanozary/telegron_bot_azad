@@ -9,6 +9,7 @@ BAD_WORDS_FILE = Path("bad_words.txt")
 DEFAULT_SETTINGS = {
     "required_channel": "",
     "required_channel_message_limit": "5",
+    "welcome_enabled": "1",
     "message_welcome": (
         "{user} عزیز، به گروه خوش آمدید.\n\n"
         "لطفاً قوانین گروه را رعایت کنید و از ارسال پیام‌های نامرتبط یا تکراری خودداری فرمایید."
@@ -181,3 +182,12 @@ def get_message_templates() -> dict[str, str]:
         for key, value in DEFAULT_SETTINGS.items()
         if key.startswith("message_")
     }
+
+
+def get_bool_setting(key: str, default: bool = False) -> bool:
+    default_value = "1" if default else "0"
+    return get_setting(key, default_value).lower() in {"1", "true", "yes", "on"}
+
+
+def is_welcome_enabled() -> bool:
+    return get_bool_setting("welcome_enabled", True)

@@ -17,6 +17,7 @@ from storage import (
     get_required_channel,
     get_required_channel_message_limit,
     init_db,
+    is_welcome_enabled,
     normalize_text,
 )
 
@@ -290,6 +291,8 @@ async def enforce_required_channel_membership(
 
 async def welcome_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.new_chat_members:
+        return
+    if not is_welcome_enabled():
         return
 
     chat = update.effective_chat
