@@ -38,8 +38,9 @@
 
     <article class="panel-card">
       <h2>امنیت پنل</h2>
-      <p class="muted">نام کاربری و رمز عبور از متغیرهای محیطی خوانده می‌شود.</p>
+      <p class="muted">نام کاربری و رمز عبور پنل را تغییر دهید یا از حساب خارج شوید.</p>
       <div class="card-actions">
+        <a class="pretty-btn" href="{{ url_for('admin_settings.index') }}">تنظیمات ادمین</a>
         <a class="pretty-btn" href="{{ url_for('logout') }}">خروج</a>
       </div>
     </article>

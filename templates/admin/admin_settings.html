@@ -1,0 +1,45 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+{{ base_css|safe }}
+<main class="admin-shell">
+  <section class="hero">
+    <span class="badge-soft">امنیت پنل</span>
+    <h1>تنظیمات ادمین</h1>
+    <p>نام کاربری و رمز عبور ورود به پنل را از اینجا تغییر دهید. رمز عبور به صورت hash شده ذخیره می‌شود.</p>
+  </section>
+
+  <section class="panel-card">
+    <form class="admin-form" method="post">
+      <label for="admin_username">نام کاربری</label>
+      <input
+        id="admin_username"
+        name="admin_username"
+        value="{{ admin_username }}"
+        autocomplete="username"
+        required
+      >
+
+      <label for="admin_password">رمز عبور جدید</label>
+      <input
+        id="admin_password"
+        name="admin_password"
+        type="password"
+        autocomplete="new-password"
+        placeholder="برای حفظ رمز فعلی خالی بگذارید"
+      >
+
+      <label for="admin_password_confirm">تکرار رمز عبور جدید</label>
+      <input
+        id="admin_password_confirm"
+        name="admin_password_confirm"
+        type="password"
+        autocomplete="new-password"
+        placeholder="برای حفظ رمز فعلی خالی بگذارید"
+      >
+
+      <button class="pretty-btn" type="submit">ذخیره تنظیمات ادمین</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

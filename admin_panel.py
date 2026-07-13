@@ -12,6 +12,7 @@ from flask_admin import BaseView
 from storage import (
     add_bad_word,
     delete_bad_word,
+    get_admin_username,
     get_message_templates,
     get_setting,
     get_required_channel,
@@ -20,11 +21,11 @@ from storage import (
     list_bad_words,
     parse_required_channels,
     set_setting,
+    update_admin_credentials,
+    verify_admin_credentials,
 )
 
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 
 MESSAGE_TEMPLATE_LABELS = {
@@ -608,7 +609,7 @@ def create_app() -> Flask:
         if request.method == "POST":
             username = request.form.get("username", "")
             password = request.form.get("password", "")
-            if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+            if verify_admin_credentials(username, password):
                 session["admin_logged_in"] = True
                 return redirect(url_for("admin.index"))
             flash("نام کاربری یا رمز عبور اشتباه است.", "danger")
@@ -654,6 +655,7 @@ def create_app() -> Flask:
     admin.add_view(BadWordsView(name="کلمات ممنوعه", endpoint="bad_words"))
     admin.add_view(SettingsView(name="تنظیمات کانال", endpoint="settings"))
     admin.add_view(MessagesView(name="پیام‌های ربات", endpoint="messages"))
+    admin.add_view(AdminSettingsView(name="تنظیمات ادمین", endpoint="admin_settings"))
     return app
 
 
@@ -746,6 +748,35 @@ class MessagesView(BaseView):
             labels=MESSAGE_TEMPLATE_LABELS,
             templates=get_message_templates(),
             welcome_enabled=get_setting("welcome_enabled", "1") == "1",
+        )
+
+
+class AdminSettingsView(BaseView):
+    @expose("/", methods=["GET", "POST"])
+    def index(self) -> str | Response:
+        if request.method == "POST":
+            username = request.form.get("admin_username", "")
+            password = request.form.get("admin_password", "")
+            password_confirm = request.form.get("admin_password_confirm", "")
+
+            if not username.strip():
+                flash("نام کاربری نمی‌تواند خالی باشد.", "danger")
+            elif password and password != password_confirm:
+                flash("تکرار رمز عبور با رمز جدید یکی نیست.", "danger")
+            else:
+                try:
+                    update_admin_credentials(username, password or None)
+                except ValueError:
+                    flash("نام کاربری نمی‌تواند خالی باشد.", "danger")
+                else:
+                    session["admin_logged_in"] = True
+                    flash("تنظیمات ادمین ذخیره شد.", "success")
+                    return redirect(url_for(".index"))
+
+        return self.render(
+            "admin/admin_settings.html",
+            base_css=BASE_CSS,
+            admin_username=get_admin_username(),
         )
 
 

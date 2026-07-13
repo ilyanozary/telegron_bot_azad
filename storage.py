@@ -2,11 +2,16 @@ import os
 import sqlite3
 from pathlib import Path
 
+from werkzeug.security import check_password_hash, generate_password_hash
+
 
 DB_PATH = Path(os.getenv("BOT_DB_PATH", "bot_settings.sqlite3"))
 BAD_WORDS_FILE = Path("bad_words.txt")
+DEFAULT_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
 
 DEFAULT_SETTINGS = {
+    "admin_username": DEFAULT_ADMIN_USERNAME,
     "required_channel": "",
     "required_channel_message_limit": "5",
     "welcome_enabled": "1",
@@ -69,6 +74,10 @@ def init_db() -> None:
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
                 (key, value),
             )
+        connection.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+            ("admin_password_hash", generate_password_hash(DEFAULT_ADMIN_PASSWORD)),
+        )
 
         bad_words_count = connection.execute(
             "SELECT COUNT(*) FROM bad_words"
@@ -207,3 +216,25 @@ def get_bool_setting(key: str, default: bool = False) -> bool:
 
 def is_welcome_enabled() -> bool:
     return get_bool_setting("welcome_enabled", True)
+
+
+def get_admin_username() -> str:
+    return get_setting("admin_username", DEFAULT_ADMIN_USERNAME)
+
+
+def verify_admin_credentials(username: str, password: str) -> bool:
+    saved_username = get_admin_username()
+    saved_password_hash = get_setting("admin_password_hash", "")
+    if not saved_password_hash:
+        return username == DEFAULT_ADMIN_USERNAME and password == DEFAULT_ADMIN_PASSWORD
+    return username == saved_username and check_password_hash(saved_password_hash, password)
+
+
+def update_admin_credentials(username: str, password: str | None = None) -> None:
+    clean_username = username.strip()
+    if not clean_username:
+        raise ValueError("username is required")
+
+    set_setting("admin_username", clean_username)
+    if password:
+        set_setting("admin_password_hash", generate_password_hash(password))

@@ -29,6 +29,8 @@
    ADMIN_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
    ```
 
+   `ADMIN_USERNAME` و `ADMIN_PASSWORD` فقط مقدار اولیه ورود هستند. بعد از اولین اجرا، می‌توانید آن‌ها را از صفحه «تنظیمات ادمین» داخل پنل تغییر دهید.
+
 3. سرویس‌ها را بالا بیاورید:
 
    ```bash
@@ -90,6 +92,8 @@
    export ADMIN_SECRET_KEY="CHANGE_ME_SECRET"
    flask --app admin_panel run --host 0.0.0.0 --port 5000
    ```
+
+   نام کاربری و رمز عبور اولیه از `ADMIN_USERNAME` و `ADMIN_PASSWORD` خوانده می‌شود و بعداً از پنل قابل تغییر است.
 
    سپس وارد آدرس زیر شوید:
 
