@@ -21,9 +21,13 @@
 
     <article class="panel-card">
       <h2>کانال اجباری</h2>
-      {% if channel %}
-        <p class="badge-soft">{{ channel }}</p>
-        <p class="muted">بعد از {{ limit }} پیام، پیام آخر کاربر غیرعضو حذف می‌شود.</p>
+      {% if channels %}
+        <div class="channel-list">
+          {% for item in channels %}
+            <span class="channel-chip">{{ item }}</span>
+          {% endfor %}
+        </div>
+        <p class="muted">بعد از {{ limit }} پیام، پیام آخر کاربری که عضو همه کانال‌ها نباشد حذف می‌شود.</p>
       {% else %}
         <p class="muted">هنوز کانالی تعریف نشده و این قانون غیرفعال است.</p>
       {% endif %}

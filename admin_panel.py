@@ -18,6 +18,7 @@ from storage import (
     get_required_channel_message_limit,
     init_db,
     list_bad_words,
+    parse_required_channels,
     set_setting,
 )
 
@@ -33,7 +34,7 @@ MESSAGE_TEMPLATE_LABELS = {
     },
     "message_required_channel": {
         "label": "هشدار عضویت اجباری در کانال",
-        "hint": "متغیرهای قابل استفاده: {user} و {channel}",
+        "hint": "متغیرهای قابل استفاده: {user} و {channel}. مقدار {channel} می‌تواند لیست چند کانال باشد.",
     },
     "message_profanity_warning": {
         "label": "هشدار حذف پیام نامناسب",
@@ -170,6 +171,13 @@ def validate_required_channel(channel: str) -> ChannelValidationResult:
         title="ربات ادمین کانال است",
         message=f"کانال «{chat_title}» بررسی شد؛ ربات ادمین است و همه چیز اوکیه.",
     )
+
+
+def validate_required_channels(raw_channels: str) -> list[ChannelValidationResult]:
+    channels = parse_required_channels(raw_channels)
+    if not channels:
+        return [validate_required_channel("")]
+    return [validate_required_channel(channel) for channel in channels]
 
 
 BASE_CSS = """
@@ -441,6 +449,26 @@ BASE_CSS = """
     font-size: 16px;
     font-weight: 900;
   }
+  .status-list {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .channel-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 0;
+  }
+  .channel-chip {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 10px;
+    color: var(--ink);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
   .template-grid {
     display: grid;
     gap: 14px;
@@ -640,6 +668,7 @@ class DashboardView(AdminIndexView):
             base_css=BASE_CSS,
             words_count=len(words),
             channel=channel,
+            channels=parse_required_channels(channel),
             limit=limit,
         )
 
@@ -668,28 +697,36 @@ class BadWordsView(BaseView):
 class SettingsView(BaseView):
     @expose("/", methods=["GET", "POST"])
     def index(self) -> str | Response:
-        validation = ChannelValidationResult(
-            ok=True,
-            level="info",
-            title="آماده بررسی کانال",
-            message="بعد از وارد کردن کانال و ذخیره، پنل وضعیت ادمین بودن ربات را از تلگرام بررسی می‌کند.",
-        )
+        validations = [
+            ChannelValidationResult(
+                ok=True,
+                level="info",
+                title="آماده بررسی کانال‌ها",
+                message="بعد از وارد کردن کانال‌ها و ذخیره، پنل وضعیت ادمین بودن ربات را برای تک‌تک کانال‌ها بررسی می‌کند.",
+            )
+        ]
         if request.method == "POST":
-            channel = request.form.get("required_channel", "").strip()
+            channel = "\n".join(
+                parse_required_channels(request.form.get("required_channel", ""))
+            )
             set_setting(
                 "required_channel_message_limit",
                 request.form.get("required_channel_message_limit", "5"),
             )
             set_setting("required_channel", channel)
-            validation = validate_required_channel(channel)
-            flash(validation.message, validation.level)
+            validations = validate_required_channels(channel)
+            if all(result.ok for result in validations):
+                flash("همه کانال‌ها بررسی شدند و همه چیز اوکیه.", "success")
+            else:
+                flash("بعضی کانال‌ها نیاز به بررسی دارند؛ وضعیت هر کانال پایین نمایش داده شده.", "warning")
 
         return self.render(
             "admin/settings.html",
             base_css=BASE_CSS,
             channel=get_required_channel(),
+            channels=parse_required_channels(get_required_channel()),
             limit=get_required_channel_message_limit(),
-            validation=validation,
+            validations=validations,
         )
 
 
