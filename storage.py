@@ -16,7 +16,7 @@ DEFAULT_SETTINGS = {
     ),
     "message_required_channel": (
         "{user} عزیز،\n\n"
-        "برای ادامه فعالیت در گروه، لطفاً ابتدا در کانال/گروه زیر عضو شوید:\n"
+        "برای ادامه فعالیت در گروه، لطفاً ابتدا در کانال زیر عضو شوید:\n"
         "{channel}\n\n"
         "پس از عضویت، می‌توانید پیام خود را دوباره ارسال کنید."
     ),
@@ -159,28 +159,8 @@ def set_setting(key: str, value: str) -> None:
         )
 
 
-def parse_required_channels(value: str) -> list[str]:
-    channels: list[str] = []
-    seen: set[str] = set()
-    for line in value.splitlines():
-        channel = line.strip()
-        if not channel or channel in seen:
-            continue
-        channels.append(channel)
-        seen.add(channel)
-    return channels
-
-
 def get_required_channel() -> str:
     return get_setting("required_channel")
-
-
-def get_required_channels() -> list[str]:
-    return parse_required_channels(get_required_channel())
-
-
-def set_required_channels(value: str) -> None:
-    set_setting("required_channel", "\n".join(parse_required_channels(value)))
 
 
 def get_required_channel_message_limit() -> int:

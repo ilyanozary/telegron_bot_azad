@@ -20,19 +20,15 @@
     </article>
 
     <article class="panel-card">
-      <h2>کانال/گروه اجباری</h2>
-      {% if channels %}
-        <div class="badge-list">
-          {% for channel in channels %}
-            <span class="badge-soft">{{ channel }}</span>
-          {% endfor %}
-        </div>
-        <p class="muted">کاربر باید عضو همه {{ channels|length }} مورد باشد. بعد از {{ limit }} پیام، پیام آخر کاربر غیرعضو حذف می‌شود.</p>
+      <h2>کانال اجباری</h2>
+      {% if channel %}
+        <p class="badge-soft">{{ channel }}</p>
+        <p class="muted">بعد از {{ limit }} پیام، پیام آخر کاربر غیرعضو حذف می‌شود.</p>
       {% else %}
-        <p class="muted">هنوز کانال یا گروهی تعریف نشده و این قانون غیرفعال است.</p>
+        <p class="muted">هنوز کانالی تعریف نشده و این قانون غیرفعال است.</p>
       {% endif %}
       <div class="card-actions">
-        <a class="pretty-btn" href="{{ url_for('settings.index') }}">تنظیم کانال/گروه</a>
+        <a class="pretty-btn" href="{{ url_for('settings.index') }}">تنظیم کانال</a>
       </div>
     </article>
 

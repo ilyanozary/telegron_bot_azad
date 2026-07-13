@@ -13,12 +13,11 @@ from storage import (
     add_bad_word,
     delete_bad_word,
     get_message_templates,
+    get_setting,
     get_required_channel,
-    get_required_channels,
     get_required_channel_message_limit,
     init_db,
     list_bad_words,
-    set_required_channels,
     set_setting,
 )
 
@@ -33,7 +32,7 @@ MESSAGE_TEMPLATE_LABELS = {
         "hint": "متغیر قابل استفاده: {user}",
     },
     "message_required_channel": {
-        "label": "هشدار عضویت اجباری در کانال/گروه",
+        "label": "هشدار عضویت اجباری در کانال",
         "hint": "متغیرهای قابل استفاده: {user} و {channel}",
     },
     "message_profanity_warning": {
@@ -100,15 +99,15 @@ def validate_required_channel(channel: str) -> ChannelValidationResult:
         return ChannelValidationResult(
             ok=True,
             level="info",
-            title="قانون عضویت اجباری غیرفعال است",
-            message="کانال یا گروهی وارد نشده؛ عضویت اجباری فعلاً اعمال نمی‌شود.",
+            title="قانون کانال غیرفعال است",
+            message="کانالی وارد نشده؛ عضویت اجباری فعلاً اعمال نمی‌شود.",
         )
     if not BOT_TOKEN:
         return ChannelValidationResult(
             ok=False,
             level="danger",
             title="توکن بات تنظیم نشده",
-            message="برای چک کانال/گروه، متغیر BOT_TOKEN باید برای سرویس پنل هم تنظیم باشد.",
+            message="برای چک کانال، متغیر BOT_TOKEN باید برای سرویس پنل هم تنظیم باشد.",
         )
 
     chat_id = get_channel_chat_id(channel)
@@ -128,10 +127,10 @@ def validate_required_channel(channel: str) -> ChannelValidationResult:
         return ChannelValidationResult(
             ok=False,
             level="danger",
-            title="کانال/گروه پیدا نشد یا در دسترس نیست",
+            title="کانال پیدا نشد یا در دسترس نیست",
             message=(
-                "شناسه/یوزرنیم را بررسی کنید. برای مورد خصوصی معمولاً باید "
-                "شناسه عددی را وارد کنید و ربات داخل آن باشد."
+                "شناسه/یوزرنیم کانال را بررسی کنید. برای کانال خصوصی معمولاً باید "
+                "شناسه عددی کانال را وارد کنید و ربات داخل کانال باشد."
             ),
             detail=chat_response.get("description", ""),
         )
@@ -145,8 +144,8 @@ def validate_required_channel(channel: str) -> ChannelValidationResult:
         return ChannelValidationResult(
             ok=False,
             level="danger",
-            title="ربات هنوز داخل این مورد قابل بررسی نیست",
-            message="ربات را به کانال/گروه اضافه و ادمین کنید، سپس دوباره دکمه ذخیره را بزنید.",
+            title="ربات هنوز داخل کانال قابل بررسی نیست",
+            message="ربات را به کانال اضافه و ادمین کنید، سپس دوباره دکمه ذخیره را بزنید.",
             detail=member_response.get("description", ""),
         )
 
@@ -158,67 +157,18 @@ def validate_required_channel(channel: str) -> ChannelValidationResult:
         return ChannelValidationResult(
             ok=False,
             level="warning",
-            title="ربات هنوز ادمین نیست",
+            title="ربات هنوز ادمین کانال نیست",
             message=(
-                f"«{chat_title}» پیدا شد، اما وضعیت ربات «{status or 'نامشخص'}» است. "
-                "ربات را ادمین کنید و دوباره ذخیره/بررسی را بزنید."
+                f"کانال «{chat_title}» پیدا شد، اما وضعیت ربات «{status or 'نامشخص'}» است. "
+                "ربات را در کانال ادمین کنید و دوباره ذخیره/بررسی را بزنید."
             ),
         )
 
     return ChannelValidationResult(
         ok=True,
         level="success",
-        title="ربات ادمین است",
-        message=f"«{chat_title}» بررسی شد؛ ربات ادمین است و همه چیز اوکیه.",
-    )
-
-
-def validate_required_channels(channels: list[str]) -> ChannelValidationResult:
-    if not channels:
-        return ChannelValidationResult(
-            ok=True,
-            level="info",
-            title="قانون عضویت اجباری غیرفعال است",
-            message="کانال یا گروهی وارد نشده؛ عضویت اجباری فعلاً اعمال نمی‌شود.",
-        )
-
-    results = [validate_required_channel(channel) for channel in channels]
-    failed_results = [result for result in results if not result.ok]
-    warning_results = [result for result in results if result.level == "warning"]
-    detail_lines = [
-        f"{channel}: {result.title} - {result.message}"
-        for channel, result in zip(channels, results)
-    ]
-    failed_count = len(failed_results)
-    success_count = len(results) - failed_count
-
-    if failed_results:
-        return ChannelValidationResult(
-            ok=False,
-            level="danger" if any(result.level == "danger" for result in failed_results) else "warning",
-            title="برخی کانال‌ها/گروه‌ها قابل بررسی نیستند",
-            message=(
-                f"{success_count} مورد آماده است و {failed_count} مورد نیاز به بررسی دارد. "
-                "جزئیات هر مورد پایین نمایش داده شده است."
-            ),
-            detail="\n".join(detail_lines),
-        )
-
-    if warning_results:
-        return ChannelValidationResult(
-            ok=False,
-            level="warning",
-            title="ربات هنوز همه‌جا ادمین نیست",
-            message="برای اعمال درست عضویت اجباری، ربات باید در همه موارد ادمین باشد.",
-            detail="\n".join(detail_lines),
-        )
-
-    return ChannelValidationResult(
-        ok=True,
-        level="success",
-        title="همه کانال‌ها/گروه‌ها آماده هستند",
-        message=f"{len(channels)} مورد بررسی شد؛ ربات در همه آن‌ها ادمین است.",
-        detail="\n".join(detail_lines),
+        title="ربات ادمین کانال است",
+        message=f"کانال «{chat_title}» بررسی شد؛ ربات ادمین است و همه چیز اوکیه.",
     )
 
 
@@ -456,12 +406,6 @@ BASE_CSS = """
     font-weight: 800;
     overflow-wrap: anywhere;
   }
-  .badge-list {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 10px;
-  }
   .alert {
     direction: rtl;
     border-radius: 8px;
@@ -496,14 +440,6 @@ BASE_CSS = """
     margin: 0 0 6px;
     font-size: 16px;
     font-weight: 900;
-  }
-  .validation-list {
-    display: grid;
-    gap: 6px;
-    margin: 10px 0 0;
-    padding-right: 18px;
-    direction: ltr;
-    text-align: left;
   }
   .template-grid {
     display: grid;
@@ -657,7 +593,7 @@ def create_app() -> Flask:
               <section class="hero">
                 <span class="badge-soft">پنل مدیریت بات تلگرام</span>
                 <h1>ورود مدیر</h1>
-                <p>برای مدیریت کلمات ممنوعه و عضویت اجباری وارد شوید.</p>
+                <p>برای مدیریت کلمات ممنوعه و کانال اجباری وارد شوید.</p>
               </section>
               {% with messages = get_flashed_messages(with_categories=true) %}
                 {% for category, message in messages %}
@@ -688,7 +624,7 @@ def create_app() -> Flask:
         index_view=DashboardView(url="/admin"),
     )
     admin.add_view(BadWordsView(name="کلمات ممنوعه", endpoint="bad_words"))
-    admin.add_view(SettingsView(name="تنظیمات کانال/گروه", endpoint="settings"))
+    admin.add_view(SettingsView(name="تنظیمات کانال", endpoint="settings"))
     admin.add_view(MessagesView(name="پیام‌های ربات", endpoint="messages"))
     return app
 
@@ -697,13 +633,13 @@ class DashboardView(AdminIndexView):
     @expose("/")
     def index(self) -> str:
         words = list_bad_words()
-        channels = get_required_channels()
+        channel = get_required_channel()
         limit = get_required_channel_message_limit()
         return self.render(
             "admin/dashboard.html",
             base_css=BASE_CSS,
             words_count=len(words),
-            channels=channels,
+            channel=channel,
             limit=limit,
         )
 
@@ -735,24 +671,23 @@ class SettingsView(BaseView):
         validation = ChannelValidationResult(
             ok=True,
             level="info",
-            title="آماده بررسی کانال/گروه",
-            message="بعد از وارد کردن موارد و ذخیره، پنل وضعیت ادمین بودن ربات را از تلگرام بررسی می‌کند.",
+            title="آماده بررسی کانال",
+            message="بعد از وارد کردن کانال و ذخیره، پنل وضعیت ادمین بودن ربات را از تلگرام بررسی می‌کند.",
         )
         if request.method == "POST":
-            required_channels = request.form.get("required_channels", "")
+            channel = request.form.get("required_channel", "").strip()
             set_setting(
                 "required_channel_message_limit",
                 request.form.get("required_channel_message_limit", "5"),
             )
-            set_required_channels(required_channels)
-            validation = validate_required_channels(get_required_channels())
+            set_setting("required_channel", channel)
+            validation = validate_required_channel(channel)
             flash(validation.message, validation.level)
 
         return self.render(
             "admin/settings.html",
             base_css=BASE_CSS,
-            channels=get_required_channels(),
-            required_channels_text=get_required_channel(),
+            channel=get_required_channel(),
             limit=get_required_channel_message_limit(),
             validation=validation,
         )

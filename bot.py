@@ -14,7 +14,7 @@ from telegram.ext import Application, ChatMemberHandler, ContextTypes, MessageHa
 from storage import (
     get_bad_words,
     get_message_template,
-    get_required_channels,
+    get_required_channel,
     get_required_channel_message_limit,
     init_db,
     is_welcome_enabled,
@@ -37,7 +37,7 @@ SPAM_MUTE_SECONDS = 10 * 60
 # In-memory anti-spam tracking (resets on bot restart).
 MESSAGE_TIMES: dict[tuple[int, int], deque[float]] = defaultdict(deque)
 REPEAT_STATE: dict[tuple[int, int], tuple[str, int, float]] = {}
-CHANNEL_JOIN_MESSAGE_COUNTS: dict[tuple[int, int, tuple[str, ...]], int] = defaultdict(int)
+CHANNEL_JOIN_MESSAGE_COUNTS: dict[tuple[int, int, str], int] = defaultdict(int)
 
 
 class SafeTemplateValues(dict):
@@ -199,39 +199,33 @@ async def is_user_required_channel_member(
 
 
 async def log_required_channel_access(application: Application) -> None:
-    channels = get_required_channels()
-    if not channels:
-        logger.info("Required channels are not configured.")
+    channel = get_required_channel()
+    if not channel:
+        logger.info("Required channel is not configured.")
         return
 
+    chat_id = get_channel_chat_id(channel)
     bot = application.bot
     try:
         bot_user = await bot.get_me()
+        chat = await bot.get_chat(chat_id=chat_id)
+        member = await bot.get_chat_member(chat_id=chat_id, user_id=bot_user.id)
     except TelegramError as exc:
-        logger.warning("Could not read bot identity for required channels: %s", exc)
+        logger.warning(
+            "Could not read bot access for required channel. channel=%r chat_id=%r error=%s",
+            channel,
+            chat_id,
+            exc,
+        )
         return
 
-    for channel in channels:
-        chat_id = get_channel_chat_id(channel)
-        try:
-            chat = await bot.get_chat(chat_id=chat_id)
-            member = await bot.get_chat_member(chat_id=chat_id, user_id=bot_user.id)
-        except TelegramError as exc:
-            logger.warning(
-                "Could not read bot access for required channel. channel=%r chat_id=%r error=%s",
-                channel,
-                chat_id,
-                exc,
-            )
-            continue
-
-        logger.info(
-            "Required channel access: %s, bot_status=%s, bot_is_admin=%s, permissions=%s",
-            describe_chat(chat),
-            member.status,
-            is_admin_status(member.status),
-            describe_admin_permissions(member),
-        )
+    logger.info(
+        "Required channel access: %s, bot_status=%s, bot_is_admin=%s, permissions=%s",
+        describe_chat(chat),
+        member.status,
+        is_admin_status(member.status),
+        describe_admin_permissions(member),
+    )
 
 
 async def log_bot_chat_member_update(
@@ -260,21 +254,18 @@ async def enforce_required_channel_membership(
     chat = update.effective_chat
     user = update.effective_user
     message = update.message
-    channels = get_required_channels()
-    if not chat or not user or not message or not channels:
+    channel = get_required_channel()
+    if not chat or not user or not message or not channel:
         return False
 
-    missing_channels: list[str] = []
-    for channel in channels:
-        is_member = await is_user_required_channel_member(channel, user.id, context)
-        if is_member is False:
-            missing_channels.append(channel)
-
-    key = (chat.id, user.id, tuple(channels))
-    if not missing_channels:
-        CHANNEL_JOIN_MESSAGE_COUNTS.pop(key, None)
+    is_member = await is_user_required_channel_member(channel, user.id, context)
+    if is_member is True:
+        CHANNEL_JOIN_MESSAGE_COUNTS.pop((chat.id, user.id, channel), None)
+        return False
+    if is_member is None:
         return False
 
+    key = (chat.id, user.id, channel)
     CHANNEL_JOIN_MESSAGE_COUNTS[key] += 1
     message_limit = get_required_channel_message_limit()
     if CHANNEL_JOIN_MESSAGE_COUNTS[key] < message_limit:
@@ -285,15 +276,13 @@ async def enforce_required_channel_membership(
     except TelegramError as exc:
         logger.warning("Could not delete non-member message: %s", exc)
 
-    join_texts = [
-        await get_channel_join_text(channel, context) for channel in missing_channels
-    ]
+    channel_text = await get_channel_join_text(channel, context)
     await context.bot.send_message(
         chat_id=chat.id,
         text=render_bot_message(
             "message_required_channel",
             user=user.mention_html(),
-            channel="\n".join(join_texts),
+            channel=channel_text,
         ),
         parse_mode="HTML",
     )

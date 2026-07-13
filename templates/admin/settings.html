@@ -5,8 +5,8 @@
 <main class="admin-shell">
   <section class="hero">
     <span class="badge-soft">عضویت اجباری</span>
-    <h1>تنظیمات کانال/گروه</h1>
-    <p>کاربری که عضو همه موارد اجباری نباشد تا چند پیام فرصت دارد؛ بعد از رسیدن به محدودیت، پیام آخرش حذف می‌شود و لینک عضویت دریافت می‌کند.</p>
+    <h1>تنظیمات کانال</h1>
+    <p>کاربری که عضو کانال نباشد تا چند پیام فرصت دارد؛ بعد از رسیدن به محدودیت، پیام آخرش حذف می‌شود و لینک عضویت دریافت می‌کند.</p>
   </section>
 
   {% if validation %}
@@ -14,24 +14,21 @@
       <h3>{{ validation.title }}</h3>
       <p>{{ validation.message }}</p>
       {% if validation.detail %}
-        <ul class="validation-list">
-          {% for line in validation.detail.splitlines() %}
-            <li>{{ line }}</li>
-          {% endfor %}
-        </ul>
+        <p class="ltr">{{ validation.detail }}</p>
       {% endif %}
     </section>
   {% endif %}
 
   <section class="panel-card">
     <form class="admin-form" method="post">
-      <label for="required_channels">کانال‌ها/گروه‌های اجباری</label>
-      <textarea
-        id="required_channels"
-        name="required_channels"
-        placeholder="@your_channel یا https://t.me/your_group&#10;هر خط یک کانال یا گروه"
-      >{{ required_channels_text }}</textarea>
-      <p class="muted">هر خط یک کانال یا گروه است. کاربر باید عضو همه موارد باشد. برای چک عضویت، بهتر است بات را داخل هر مورد ادمین کنید. اگر خصوصی است، شناسه عددی را وارد کنید.</p>
+      <label for="required_channel">کانال اجباری</label>
+      <input
+        id="required_channel"
+        name="required_channel"
+        value="{{ channel }}"
+        placeholder="@your_channel یا https://t.me/your_channel"
+      >
+      <p class="muted">برای چک عضویت، بهتر است بات را داخل همان کانال ادمین کنید. اگر کانال خصوصی است، شناسه عددی کانال را وارد کنید.</p>
 
       <label for="required_channel_message_limit">تعداد پیام مجاز قبل از هشدار</label>
       <input
