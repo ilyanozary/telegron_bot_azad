@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,18 @@ SPAM_MUTE_SECONDS = 10 * 60
 MESSAGE_TIMES: dict[tuple[int, int], deque[float]] = defaultdict(deque)
 REPEAT_STATE: dict[tuple[int, int], tuple[str, int, float]] = {}
 CHANNEL_JOIN_MESSAGE_COUNTS: dict[tuple[int, int, str], int] = defaultdict(int)
+LINK_PATTERN = re.compile(
+    r"(?i)(?:"
+    r"https?://|"
+    r"www\.|"
+    r"t\.me/|"
+    r"telegram\.me/|"
+    r"\b(?:[a-z0-9][a-z0-9-]*\.)+"
+    r"(?:com|ir|net|org|info|biz|io|me|co|app|dev|site|online|shop|xyz|tv|link|ly)"
+    r"(?:/[^\s<]*)?"
+    r")"
+)
+LINK_ENTITY_TYPES = {"url", "text_link"}
 
 
 class SafeTemplateValues(dict):
@@ -84,6 +97,13 @@ def contains_bad_word(text: str) -> bool:
         return False
     clean_text = normalize_text(text)
     return any(word in clean_text for word in bad_words)
+
+
+def contains_link(message, text: str) -> bool:
+    entities = list(message.entities or []) + list(message.caption_entities or [])
+    if any(entity.type in LINK_ENTITY_TYPES for entity in entities):
+        return True
+    return bool(LINK_PATTERN.search(text))
 
 
 def detect_spam(chat_id: int, user_id: int, text: str) -> bool:
@@ -352,6 +372,25 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             )
         except TelegramError as exc:
             logger.error("Could not send profanity warning: %s", exc)
+        return
+
+    if text and contains_link(update.message, text):
+        try:
+            await update.message.delete()
+        except TelegramError as exc:
+            logger.warning("Could not delete link message: %s", exc)
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat.id,
+                text=render_bot_message(
+                    "message_link_warning",
+                    user=user.mention_html(),
+                ),
+                parse_mode="HTML",
+            )
+        except TelegramError as exc:
+            logger.error("Could not send link warning: %s", exc)
         return
 
     if await enforce_required_channel_membership(update, context):

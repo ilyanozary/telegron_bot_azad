@@ -41,6 +41,10 @@ MESSAGE_TEMPLATE_LABELS = {
         "label": "هشدار حذف پیام نامناسب",
         "hint": "متغیر قابل استفاده: {user}",
     },
+    "message_link_warning": {
+        "label": "هشدار حذف لینک",
+        "hint": "متغیر قابل استفاده: {user}",
+    },
     "message_spam_mute": {
         "label": "هشدار میوت اسپم",
         "hint": "متغیرهای قابل استفاده: {user} و {minutes}",
