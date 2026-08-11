@@ -149,6 +149,48 @@ async def is_user_admin(
     return member.status in {"administrator", "creator"}
 
 
+def is_anonymous_admin_message(update: Update) -> bool:
+    message = update.message
+    chat = update.effective_chat
+    if not message or not chat:
+        return False
+
+    sender_chat = message.sender_chat
+    user = update.effective_user
+    if sender_chat and sender_chat.id == chat.id:
+        logger.info(
+            "Skipping moderation for anonymous admin message. %s",
+            describe_chat(chat),
+        )
+        return True
+
+    if user and user.username == "GroupAnonymousBot":
+        logger.info(
+            "Skipping moderation for GroupAnonymousBot message. %s",
+            describe_chat(chat),
+        )
+        return True
+
+    return False
+
+
+def is_sender_chat_message(update: Update) -> bool:
+    message = update.message
+    chat = update.effective_chat
+    if not message or not chat or not message.sender_chat:
+        return False
+
+    if message.sender_chat.id == chat.id:
+        return False
+
+    logger.info(
+        "Skipping user moderation for sender_chat message. group=%s sender=%s",
+        describe_chat(chat),
+        describe_chat(message.sender_chat),
+    )
+    return True
+
+
 def get_channel_chat_id(channel: str) -> str:
     channel = channel.strip()
     if channel.startswith("https://t.me/"):
@@ -344,10 +386,16 @@ async def moderate_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     chat = update.effective_chat
     user = update.effective_user
-    if not chat or not user:
+    if not chat:
         return
 
     if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        return
+
+    if is_anonymous_admin_message(update) or is_sender_chat_message(update):
+        return
+
+    if not user:
         return
 
     if await is_user_admin(chat_id=chat.id, user_id=user.id, context=context):
